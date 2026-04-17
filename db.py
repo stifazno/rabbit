@@ -1,0 +1,100 @@
+import sqlite3
+
+DB_NAME = "messages.db"
+
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        text TEXT,
+        status TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS pending_messages (
+        id TEXT PRIMARY KEY,
+        text TEXT
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def insert_message(msg_id, text, status):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute(
+        "INSERT INTO messages (id, text, status) VALUES (?, ?, ?)",
+        (msg_id, text, status)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def update_status(msg_id, status):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute(
+        "UPDATE messages SET status=? WHERE id=?",
+        (status, msg_id)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_all():
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM messages ORDER BY created_at DESC")
+    rows = cur.fetchall()
+
+    conn.close()
+    return rows
+
+
+# 🔥 FALLBACK QUEUE
+
+def save_pending(msg_id, text):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute(
+        "INSERT OR REPLACE INTO pending_messages VALUES (?, ?)",
+        (msg_id, text)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_pending():
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM pending_messages")
+    rows = cur.fetchall()
+
+    conn.close()
+    return rows
+
+
+def delete_pending(msg_id):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM pending_messages WHERE id=?", (msg_id,))
+
+    conn.commit()
+    conn.close()

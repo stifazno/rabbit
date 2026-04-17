@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Message System</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 40px;
+        }
+
+        input, button {
+            padding: 8px;
+            font-size: 14px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        table {
+            margin-top: 20px;
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .sent { color: gray; }
+        .processing { color: orange; }
+        .done { color: green; }
+        .failed { color: red; }
+    </style>
+</head>
+
+<body>
+    <h2>📨 Отправка сообщения</h2>
+
+    <input id="text" placeholder="Введите сообщение">
+    <button onclick="sendMessage()">Отправить</button>
+
+    <p id="result"></p>
+
+    <h3>📊 История сообщений</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Текст</th>
+                <th>Статус</th>
+                <th>Время</th>
+            </tr>
+        </thead>
+        <tbody id="table"></tbody>
+    </table>
+
+    <script>
+        async function sendMessage() {
+            const text = document.getElementById("text").value;
+
+            const res = await fetch("http://localhost:8000/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            });
+
+            const data = await res.json();
+
+            document.getElementById("result").innerText =
+                "✅ Отправлено: " + data.message_id;
+
+            document.getElementById("text").value = "";
+
+            loadMessages();
+        }
+
+        function getStatusClass(status) {
+            if (status === "sent") return "sent";
+            if (status === "processing") return "processing";
+            if (status === "done") return "done";
+            if (status === "failed") return "failed";
+            return "";
+        }
+
+        async function loadMessages() {
+            const res = await fetch("http://localhost:8000/messages");
+            const data = await res.json();
+
+            const table = document.getElementById("table");
+            table.innerHTML = "";
+
+            data.forEach(row => {
+                const tr = document.createElement("tr");
+                const statusClass = getStatusClass(row[2]);
+
+                tr.innerHTML = `
+                    <td>${row[0]}</td>
+                    <td>${row[1]}</td>
+                    <td class="${statusClass}">${row[2]}</td>
+                    <td>${row[3]}</td>
+                `;
+
+                table.appendChild(tr);
+            });
+        }
+
+        // автообновление каждые 3 секунды
+        setInterval(loadMessages, 3000);
+
+        // первая загрузка
+        loadMessages();
+    </script>
+</body>
+</html>

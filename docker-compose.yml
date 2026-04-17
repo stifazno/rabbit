@@ -1,0 +1,47 @@
+services:
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: unless-stopped
+
+  api:
+    build: .
+    container_name: api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBIT_HOST=rabbitmq
+    volumes:
+      - ./data:/app/data
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+
+  consumer:
+    build: .
+    container_name: consumer
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBIT_HOST=rabbitmq
+    volumes:
+      - ./data:/app/data
+    command: python -u consumer.py
+    restart: unless-stopped
+
+  worker:
+    build: .
+    container_name: worker
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBIT_HOST=rabbitmq
+    volumes:
+      - ./data:/app/data
+    command: python recovery_worker.py
+    restart: unless-stopped
