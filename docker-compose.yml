@@ -1,47 +1,41 @@
 services:
-
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
-    restart: unless-stopped
 
   api:
-    build: .
-    container_name: api
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     ports:
       - "8000:8000"
     depends_on:
       - rabbitmq
-    environment:
-      - RABBIT_HOST=rabbitmq
     volumes:
-      - ./data:/app/data
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
-    restart: unless-stopped
+      - ./messages.db:/app/messages.db
+    environment:
+      - RABBITMQ_HOST=rabbitmq
 
   consumer:
-    build: .
-    container_name: consumer
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
     depends_on:
       - rabbitmq
-    environment:
-      - RABBIT_HOST=rabbitmq
     volumes:
-      - ./data:/app/data
-    command: python -u consumer.py
-    restart: unless-stopped
+      - ./messages.db:/app/messages.db
+    environment:
+      - RABBITMQ_HOST=rabbitmq
 
   worker:
-    build: .
-    container_name: worker
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
     depends_on:
       - rabbitmq
-    environment:
-      - RABBIT_HOST=rabbitmq
     volumes:
-      - ./data:/app/data
-    command: python recovery_worker.py
-    restart: unless-stopped
+      - ./messages.db:/app/messages.db
+    environment:
+      - RABBITMQ_HOST=rabbitmq

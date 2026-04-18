@@ -30,7 +30,7 @@ def send_message(message):
         credentials = pika.PlainCredentials('guest', 'guest')
 
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='127.0.0.1', credentials=credentials)
+            pika.ConnectionParameters(host='rabbitmq', credentials=credentials)
         )
 
         channel = connection.channel()
