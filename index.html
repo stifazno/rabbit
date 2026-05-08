@@ -1,122 +1,450 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>Message System</title>
+    <title>Message Dashboard</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
-        body {
-            font-family: Arial;
-            margin: 40px;
+        * {
+            box-sizing: border-box;
         }
 
-        input, button {
-            padding: 8px;
-            font-size: 14px;
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+
+        h1 {
+            margin-bottom: 25px;
+            font-size: 32px;
+        }
+
+        .top {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 220px);
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-3px);
+        }
+
+        .card h2 {
+            margin: 0;
+            font-size: 38px;
+        }
+
+        .card p {
+            margin-top: 10px;
+            color: #666;
+            font-size: 15px;
+        }
+
+        .chart-box {
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        canvas {
+            width: 280px !important;
+            height: 280px !important;
+        }
+
+        .send-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        input {
+            flex: 1;
+            padding: 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            font-size: 15px;
+            background: white;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #2563eb;
         }
 
         button {
+            border: none;
+            background: #2563eb;
+            color: white;
+            padding: 12px 18px;
+            border-radius: 10px;
             cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
 
         table {
-            margin-top: 20px;
-            border-collapse: collapse;
             width: 100%;
-        }
-
-        th, td {
-            padding: 10px;
-            border: 1px solid #ccc;
-            text-align: center;
+            border-collapse: collapse;
         }
 
         th {
-            background-color: #f2f2f2;
+            background: #f9fafb;
+            color: #6b7280;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 16px;
+            text-align: left;
         }
 
-        .sent { color: gray; }
-        .processing { color: orange; }
-        .done { color: green; }
-        .failed { color: red; }
+        td {
+            padding: 16px;
+            border-top: 1px solid #f1f1f1;
+            font-size: 14px;
+        }
+
+        tr:hover {
+            background: #fafafa;
+        }
+
+        .message-id {
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .status {
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        .done {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .processing {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .sent {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .retry-btn {
+            background: #ef4444;
+        }
+
+        .retry-btn:hover {
+            background: #dc2626;
+        }
+
+        @media(max-width: 900px) {
+
+            .top {
+                flex-direction: column;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+                width: 100%;
+            }
+
+            canvas {
+                width: 100% !important;
+                height: auto !important;
+            }
+        }
+
     </style>
 </head>
 
 <body>
-    <h2>📨 Отправка сообщения</h2>
 
-    <input id="text" placeholder="Введите сообщение">
-    <button onclick="sendMessage()">Отправить</button>
+    <h1>📨 Dashboard мониторинга сообщений</h1>
 
-    <p id="result"></p>
+    <div class="top">
 
-    <h3>📊 История сообщений</h3>
+        <div class="stats">
 
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Текст</th>
-                <th>Статус</th>
-                <th>Время</th>
-            </tr>
-        </thead>
-        <tbody id="table"></tbody>
-    </table>
+            <div class="card">
+                <h2 id="total">0</h2>
+                <p>Всего сообщений</p>
+            </div>
+
+            <div class="card">
+                <h2 id="done">0</h2>
+                <p>Успешно отправлено</p>
+            </div>
+
+            <div class="card">
+                <h2 id="failed">0</h2>
+                <p>Ошибки</p>
+            </div>
+
+            <div class="card">
+                <h2 id="processing">0</h2>
+                <p>В процессе</p>
+            </div>
+
+        </div>
+
+        <div class="chart-box">
+            <canvas id="chart"></canvas>
+        </div>
+
+    </div>
+
+    <div class="send-box">
+
+        <input
+            id="text"
+            placeholder="Введите сообщение..."
+        >
+
+        <button onclick="sendMessage()">
+            Отправить
+        </button>
+
+    </div>
+
+    <div class="table-container">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Сообщение</th>
+                    <th>Статус</th>
+                    <th>Время</th>
+                    <th>Действие</th>
+                </tr>
+            </thead>
+
+            <tbody id="table"></tbody>
+
+        </table>
+
+    </div>
 
     <script>
-        async function sendMessage() {
-            const text = document.getElementById("text").value;
 
-            const res = await fetch("http://localhost:8000/send", {
+        let chart;
+
+        async function sendMessage() {
+
+            const text =
+                document.getElementById("text").value;
+
+            if (!text.trim()) return;
+
+            await fetch("http://localhost:8000/send", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({ text })
             });
 
-            const data = await res.json();
-
-            document.getElementById("result").innerText =
-                "✅ Отправлено: " + data.message_id;
-
             document.getElementById("text").value = "";
 
-            loadMessages();
+            loadAll();
+        }
+
+        async function retryMessage(id) {
+
+            await fetch(
+                `http://localhost:8000/retry/${id}`,
+                {
+                    method: "POST"
+                }
+            );
+
+            loadAll();
+        }
+
+        async function loadStats() {
+
+            const res = await fetch(
+                "http://localhost:8000/stats"
+            );
+
+            const data = await res.json();
+
+            document.getElementById("total").innerText =
+                data.total;
+
+            document.getElementById("done").innerText =
+                data.done;
+
+            document.getElementById("failed").innerText =
+                data.failed;
+
+            document.getElementById("processing").innerText =
+                data.processing;
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            const ctx =
+                document.getElementById("chart");
+
+            chart = new Chart(ctx, {
+
+                type: 'doughnut',
+
+                data: {
+                    labels: [
+                        'Успешно',
+                        'Ошибки',
+                        'В процессе',
+                        'Принято'
+                    ],
+
+                    datasets: [{
+                        data: [
+                            data.done,
+                            data.failed,
+                            data.processing,
+                            data.sent
+                        ]
+                    }]
+                },
+
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
         }
 
         function getStatusClass(status) {
-            if (status === "sent") return "sent";
-            if (status === "processing") return "processing";
-            if (status === "done") return "done";
-            if (status === "failed") return "failed";
-            return "";
+
+            if (status === "Отправлено")
+                return "done";
+
+            if (status === "Ошибка отправки")
+                return "failed";
+
+            if (status === "В процессе")
+                return "processing";
+
+            return "sent";
         }
 
         async function loadMessages() {
-            const res = await fetch("http://localhost:8000/messages");
+
+            const res = await fetch(
+                "http://localhost:8000/messages"
+            );
+
             const data = await res.json();
 
-            const table = document.getElementById("table");
+            const table =
+                document.getElementById("table");
+
             table.innerHTML = "";
 
             data.forEach(row => {
-                const tr = document.createElement("tr");
-                const statusClass = getStatusClass(row[2]);
+
+                const tr =
+                    document.createElement("tr");
+
+                let retryButton = "";
+
+                if (row[2] === "Ошибка отправки") {
+
+                    retryButton = `
+                        <button 
+                            class="retry-btn"
+                            onclick="retryMessage('${row[0]}')"
+                        >
+                            Retry
+                        </button>
+                    `;
+                }
+
+                const statusClass =
+                    getStatusClass(row[2]);
 
                 tr.innerHTML = `
-                    <td>${row[0]}</td>
+                    <td class="message-id">${row[0]}</td>
+
                     <td>${row[1]}</td>
-                    <td class="${statusClass}">${row[2]}</td>
+
+                    <td>
+                        <span class="status ${statusClass}">
+                            ${row[2]}
+                        </span>
+                    </td>
+
                     <td>${row[3]}</td>
+
+                    <td>${retryButton}</td>
                 `;
 
                 table.appendChild(tr);
             });
         }
 
-        // автообновление каждые 3 секунды
-        setInterval(loadMessages, 3000);
+        async function loadAll() {
 
-        // первая загрузка
-        loadMessages();
+            await loadStats();
+            await loadMessages();
+        }
+
+        loadAll();
+
+        setInterval(loadAll, 3000);
+
     </script>
+
 </body>
+
 </html>

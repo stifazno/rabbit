@@ -57,14 +57,16 @@ def get_all():
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM messages ORDER BY created_at DESC")
+    cur.execute(
+        "SELECT * FROM messages ORDER BY created_at DESC"
+    )
+
     rows = cur.fetchall()
 
     conn.close()
+
     return rows
 
-
-# 🔥 FALLBACK QUEUE
 
 def save_pending(msg_id, text):
     conn = sqlite3.connect(DB_NAME)
@@ -84,9 +86,11 @@ def get_pending():
     cur = conn.cursor()
 
     cur.execute("SELECT * FROM pending_messages")
+
     rows = cur.fetchall()
 
     conn.close()
+
     return rows
 
 
@@ -94,7 +98,70 @@ def delete_pending(msg_id):
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
 
-    cur.execute("DELETE FROM pending_messages WHERE id=?", (msg_id,))
+    cur.execute(
+        "DELETE FROM pending_messages WHERE id=?",
+        (msg_id,)
+    )
 
     conn.commit()
     conn.close()
+
+
+def get_stats():
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) FROM messages")
+    total = cur.fetchone()[0]
+
+    cur.execute(
+        "SELECT COUNT(*) FROM messages WHERE status='Отправлено'"
+    )
+    done = cur.fetchone()[0]
+
+    cur.execute(
+        "SELECT COUNT(*) FROM messages WHERE status='Ошибка отправки'"
+    )
+    failed = cur.fetchone()[0]
+
+    cur.execute(
+        "SELECT COUNT(*) FROM messages WHERE status='В процессе'"
+    )
+    processing = cur.fetchone()[0]
+
+    cur.execute(
+        "SELECT COUNT(*) FROM messages WHERE status='Принято'"
+    )
+    sent = cur.fetchone()[0]
+
+    conn.close()
+
+    return {
+        "total": total,
+        "done": done,
+        "failed": failed,
+        "processing": processing,
+        "sent": sent
+    }
+
+
+def retry_message(msg_id):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT id, text FROM messages WHERE id=?",
+        (msg_id,)
+    )
+
+    row = cur.fetchone()
+
+    conn.close()
+
+    if row:
+        return {
+            "id": row[0],
+            "text": row[1]
+        }
+
+    return None
