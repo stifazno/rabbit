@@ -19,7 +19,7 @@ def callback(ch, method, properties, body):
 
         msg_id = message["id"]
 
-        log(f"📩 Получено сообщение {msg_id}")
+        log(f"Получено сообщение {msg_id}")
 
         update_status(msg_id, "В процессе")
 
@@ -38,7 +38,7 @@ def callback(ch, method, properties, body):
 
     except Exception as e:
 
-        log(f"❌ Ошибка {e}")
+        log(f"Ошибка {e}")
 
         log(traceback.format_exc())
 
@@ -60,7 +60,7 @@ def start_consumer():
         connection = None
 
         try:
-            log("🔄 Подключение к RabbitMQ")
+            log("Подключение к RabbitMQ")
 
             credentials = pika.PlainCredentials(
                 'guest',
@@ -91,13 +91,13 @@ def start_consumer():
                 auto_ack=False
             )
 
-            log("🎧 Ожидание сообщений")
+            log("Ожидание сообщений")
 
             channel.start_consuming()
 
         except Exception as e:
 
-            log(f"💥 RabbitMQ недоступен: {e}")
+            log(f"RabbitMQ недоступен: {e}")
 
             try:
                 if connection:
