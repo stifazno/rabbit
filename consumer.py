@@ -2,8 +2,8 @@ import pika
 import json
 import time
 import traceback
-
-from db import update_status
+import threading
+from db import update_status, update_heartbeat
 
 QUEUE_NAME = "test_queue"
 
@@ -13,13 +13,14 @@ def log(msg):
 
 
 def callback(ch, method, properties, body):
-
     try:
-        message = json.loads(body)
+        update_heartbeat("consumer")
 
+        message = json.loads(body)
         msg_id = message["id"]
 
         log(f"Получено сообщение {msg_id}")
+        update_status(msg_id, "Получено")
 
         update_status(msg_id, "В процессе")
 
@@ -30,60 +31,46 @@ def callback(ch, method, properties, body):
 
         update_status(msg_id, "Отправлено")
 
-        ch.basic_ack(
-            delivery_tag=method.delivery_tag
-        )
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
-        log(f"✔ Успешно обработано {msg_id}")
+        log(f"✔ Обработано {msg_id}")
 
     except Exception as e:
 
         log(f"Ошибка {e}")
-
         log(traceback.format_exc())
 
-        update_status(
-            msg_id,
-            "Ошибка отправки"
-        )
+        update_status(msg_id, "Ошибка отправки")
 
-        ch.basic_nack(
-            delivery_tag=method.delivery_tag,
-            requeue=False
-        )
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
+
+def heartbeat_loop():
+    while True:
+        try:
+            update_heartbeat("consumer")
+        except:
+            pass
+        time.sleep(5)
 
 
 def start_consumer():
-
     while True:
-
         connection = None
 
         try:
             log("Подключение к RabbitMQ")
 
-            credentials = pika.PlainCredentials(
-                'guest',
-                'guest'
-            )
+            credentials = pika.PlainCredentials("guest", "guest")
 
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(
-                    host='rabbitmq',
-                    credentials=credentials
-                )
+                pika.ConnectionParameters(host="rabbitmq", credentials=credentials)
             )
 
             channel = connection.channel()
 
-            channel.queue_declare(
-                queue=QUEUE_NAME,
-                durable=True
-            )
-
-            channel.basic_qos(
-                prefetch_count=1
-            )
+            channel.queue_declare(queue=QUEUE_NAME, durable=True)
+            channel.basic_qos(prefetch_count=1)
 
             channel.basic_consume(
                 queue=QUEUE_NAME,
@@ -91,12 +78,13 @@ def start_consumer():
                 auto_ack=False
             )
 
+            update_heartbeat("consumer")
+
             log("Ожидание сообщений")
 
             channel.start_consuming()
 
         except Exception as e:
-
             log(f"RabbitMQ недоступен: {e}")
 
             try:
@@ -109,4 +97,7 @@ def start_consumer():
 
 
 if __name__ == "__main__":
+    t = threading.Thread(target=heartbeat_loop, daemon=True)
+    t.start()
+
     start_consumer()

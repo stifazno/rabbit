@@ -7,9 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             font-family: Arial, sans-serif;
@@ -22,6 +20,21 @@
         h1 {
             margin-bottom: 25px;
             font-size: 32px;
+        }
+
+        .system-status {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .status-box {
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            font-size: 14px;
+            font-weight: 500;
         }
 
         .top {
@@ -155,25 +168,10 @@
             display: inline-block;
         }
 
-        .done {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .failed {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .processing {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .sent {
-            background: #e5e7eb;
-            color: #374151;
-        }
+        .done { background: #dcfce7; color: #166534; }
+        .failed { background: #fee2e2; color: #991b1b; }
+        .processing { background: #fef3c7; color: #92400e; }
+        .sent { background: #e5e7eb; color: #374151; }
 
         .retry-btn {
             background: #ef4444;
@@ -184,20 +182,9 @@
         }
 
         @media(max-width: 900px) {
-
-            .top {
-                flex-direction: column;
-            }
-
-            .stats {
-                grid-template-columns: 1fr;
-                width: 100%;
-            }
-
-            canvas {
-                width: 100% !important;
-                height: auto !important;
-            }
+            .top { flex-direction: column; }
+            .stats { grid-template-columns: 1fr; width: 100%; }
+            canvas { width: 100% !important; height: auto !important; }
         }
 
     </style>
@@ -205,246 +192,268 @@
 
 <body>
 
-    <h1>📨 Dashboard мониторинга сообщений</h1>
+<h1>📨 Dashboard мониторинга сообщений</h1>
 
-    <div class="top">
+<div class="system-status">
 
-        <div class="stats">
+    <div id="rabbit-status" class="status-box">
+        Проверка RabbitMQ...
+    </div>
 
-            <div class="card">
-                <h2 id="total">0</h2>
-                <p>Всего сообщений</p>
-            </div>
+    <div id="consumer-status" class="status-box">
+        Проверка Consumer...
+    </div>
 
-            <div class="card">
-                <h2 id="done">0</h2>
-                <p>Успешно отправлено</p>
-            </div>
+</div>
 
-            <div class="card">
-                <h2 id="failed">0</h2>
-                <p>Ошибки</p>
-            </div>
+<div class="top">
 
-            <div class="card">
-                <h2 id="processing">0</h2>
-                <p>В процессе</p>
-            </div>
+    <div class="stats">
 
+        <div class="card">
+            <h2 id="total">0</h2>
+            <p>Всего сообщений</p>
         </div>
 
-        <div class="chart-box">
-            <canvas id="chart"></canvas>
+        <div class="card">
+            <h2 id="done">0</h2>
+            <p>Успешно отправлено</p>
+        </div>
+
+        <div class="card">
+            <h2 id="failed">0</h2>
+            <p>Ошибки</p>
+        </div>
+
+        <div class="card">
+            <h2 id="processing">0</h2>
+            <p>В процессе</p>
+        </div>
+
+        <!-- RPM -->
+        <div class="card">
+            <h2 id="rpm">0</h2>
+            <p>Сообщений / мин</p>
         </div>
 
     </div>
 
-    <div class="send-box">
-
-        <input
-            id="text"
-            placeholder="Введите сообщение..."
-        >
-
-        <button onclick="sendMessage()">
-            Отправить
-        </button>
-
+    <div class="chart-box">
+        <canvas id="chart"></canvas>
     </div>
 
-    <div class="table-container">
+</div>
 
-        <table>
+<div class="send-box">
 
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Сообщение</th>
-                    <th>Статус</th>
-                    <th>Время</th>
-                    <th>Действие</th>
-                </tr>
-            </thead>
+    <input id="text" placeholder="Введите сообщение...">
 
-            <tbody id="table"></tbody>
+    <button onclick="sendMessage()">Отправить</button>
 
-        </table>
+    <button onclick="sendTestMessage()">🧪 АВТО</button>
 
-    </div>
+</div>
 
-    <script>
+<div class="table-container">
 
-        let chart;
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Сообщение</th>
+                <th>Статус</th>
+                <th>Время</th>
+                <th>Действие</th>
+            </tr>
+        </thead>
+        <tbody id="table"></tbody>
+    </table>
 
-        async function sendMessage() {
+</div>
 
-            const text =
-                document.getElementById("text").value;
+<script>
 
-            if (!text.trim()) return;
+let chart;
 
-            await fetch("http://localhost:8000/send", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ text })
-            });
+let prevTotal = 0;
+let prevTime = Date.now();
+let rpm = 0;
 
-            document.getElementById("text").value = "";
+async function sendMessage() {
 
-            loadAll();
+    const text = document.getElementById("text").value;
+    if (!text.trim()) return;
+
+    await fetch("http://localhost:8000/send", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ text })
+    });
+
+    document.getElementById("text").value = "";
+    loadAll();
+}
+
+async function sendTestMessage() {
+
+    await fetch("http://localhost:8000/send", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ text: "Тестовое сообщение" })
+    });
+
+    loadAll();
+}
+
+async function retryMessage(id) {
+
+    await fetch(`http://localhost:8000/retry/${id}`, {
+        method: "POST"
+    });
+
+    loadAll();
+}
+
+function updateRPM(total) {
+
+    const now = Date.now();
+    const diffMinutes = (now - prevTime) / 60000;
+
+    if (prevTotal === 0 || diffMinutes === 0) {
+        prevTotal = total;
+        prevTime = now;
+        return;
+    }
+
+    rpm = Math.round((total - prevTotal) / diffMinutes);
+
+    prevTotal = total;
+    prevTime = now;
+
+    document.getElementById("rpm").innerText = rpm;
+}
+
+async function loadStats() {
+
+    const res = await fetch("http://localhost:8000/stats");
+    const data = await res.json();
+
+    document.getElementById("total").innerText = data.total;
+    document.getElementById("done").innerText = data.done;
+    document.getElementById("failed").innerText = data.failed;
+    document.getElementById("processing").innerText = data.processing;
+
+    updateRPM(data.total);
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(document.getElementById("chart"), {
+        type: 'doughnut',
+        data: {
+            labels: ['Done', 'Failed', 'Processing', 'Sent'],
+            datasets: [{
+                data: [data.done, data.failed, data.processing, data.sent]
+            }]
+        }
+    });
+}
+
+function getStatusClass(status) {
+
+    if (status === "Отправлено") return "done";
+    if (status === "Ошибка отправки") return "failed";
+    if (status === "В процессе") return "processing";
+
+    return "sent";
+}
+
+async function loadMessages() {
+
+    const res = await fetch("http://localhost:8000/messages");
+    const data = await res.json();
+
+    const table = document.getElementById("table");
+    table.innerHTML = "";
+
+    data.forEach(row => {
+
+        const tr = document.createElement("tr");
+
+        let retryButton = "";
+
+        if (row[2] === "Ошибка отправки") {
+            retryButton = `
+                <button class="retry-btn" onclick="retryMessage('${row[0]}')">
+                    Retry
+                </button>
+            `;
         }
 
-        async function retryMessage(id) {
+        tr.innerHTML = `
+            <td>${row[0]}</td>
+            <td>${row[1]}</td>
+            <td><span class="status ${getStatusClass(row[2])}">${row[2]}</span></td>
+            <td>${row[3]}</td>
+            <td>${retryButton}</td>
+        `;
 
-            await fetch(
-                `http://localhost:8000/retry/${id}`,
-                {
-                    method: "POST"
-                }
-            );
+        table.appendChild(tr);
+    });
+}
 
-            loadAll();
-        }
+async function loadAll() {
+    await loadStats();
+    await loadMessages();
+}
 
-        async function loadStats() {
+async function loadStatus() {
 
-            const res = await fetch(
-                "http://localhost:8000/stats"
-            );
+    try {
+        const res = await fetch("http://localhost:8000/status/consumer");
+        const data = await res.json();
 
-            const data = await res.json();
+        const el = document.getElementById("consumer-status");
 
-            document.getElementById("total").innerText =
-                data.total;
+        el.innerHTML = data.status === "online"
+            ? "🟢 Consumer ONLINE"
+            : "🔴 Consumer OFFLINE";
 
-            document.getElementById("done").innerText =
-                data.done;
+        el.style.color = data.status === "online" ? "green" : "red";
 
-            document.getElementById("failed").innerText =
-                data.failed;
+    } catch {
+        document.getElementById("consumer-status").innerHTML = "🔴 Consumer OFFLINE";
+    }
+}
 
-            document.getElementById("processing").innerText =
-                data.processing;
+async function loadRabbitStatus() {
 
-            if (chart) {
-                chart.destroy();
-            }
+    try {
+        const res = await fetch("http://localhost:8000/status/rabbitmq");
+        const data = await res.json();
 
-            const ctx =
-                document.getElementById("chart");
+        const el = document.getElementById("rabbit-status");
 
-            chart = new Chart(ctx, {
+        el.innerHTML = data.status === "online"
+            ? "🟢 RabbitMQ ONLINE"
+            : "🔴 RabbitMQ OFFLINE";
 
-                type: 'doughnut',
+        el.style.color = data.status === "online" ? "green" : "red";
 
-                data: {
-                    labels: [
-                        'Успешно',
-                        'Ошибки',
-                        'В процессе',
-                        'Принято'
-                    ],
+    } catch {
+        document.getElementById("rabbit-status").innerHTML = "🔴 RabbitMQ OFFLINE";
+    }
+}
 
-                    datasets: [{
-                        data: [
-                            data.done,
-                            data.failed,
-                            data.processing,
-                            data.sent
-                        ]
-                    }]
-                },
+loadAll();
 
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false
-                }
-            });
-        }
+setInterval(loadAll, 3000);
+setInterval(loadStatus, 3000);
+setInterval(loadRabbitStatus, 3000);
 
-        function getStatusClass(status) {
+loadStatus();
+loadRabbitStatus();
 
-            if (status === "Отправлено")
-                return "done";
-
-            if (status === "Ошибка отправки")
-                return "failed";
-
-            if (status === "В процессе")
-                return "processing";
-
-            return "sent";
-        }
-
-        async function loadMessages() {
-
-            const res = await fetch(
-                "http://localhost:8000/messages"
-            );
-
-            const data = await res.json();
-
-            const table =
-                document.getElementById("table");
-
-            table.innerHTML = "";
-
-            data.forEach(row => {
-
-                const tr =
-                    document.createElement("tr");
-
-                let retryButton = "";
-
-                if (row[2] === "Ошибка отправки") {
-
-                    retryButton = `
-                        <button 
-                            class="retry-btn"
-                            onclick="retryMessage('${row[0]}')"
-                        >
-                            Retry
-                        </button>
-                    `;
-                }
-
-                const statusClass =
-                    getStatusClass(row[2]);
-
-                tr.innerHTML = `
-                    <td class="message-id">${row[0]}</td>
-
-                    <td>${row[1]}</td>
-
-                    <td>
-                        <span class="status ${statusClass}">
-                            ${row[2]}
-                        </span>
-                    </td>
-
-                    <td>${row[3]}</td>
-
-                    <td>${retryButton}</td>
-                `;
-
-                table.appendChild(tr);
-            });
-        }
-
-        async function loadAll() {
-
-            await loadStats();
-            await loadMessages();
-        }
-
-        loadAll();
-
-        setInterval(loadAll, 3000);
-
-    </script>
+</script>
 
 </body>
-
 </html>
