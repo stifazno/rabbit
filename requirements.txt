@@ -1,3 +1,5 @@
 fastapi
 uvicorn
 pika
+requests
+uvicorn[standard]

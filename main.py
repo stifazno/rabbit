@@ -1,9 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import pika
 import json
 import uuid
+import os
 from datetime import datetime
 
 from db import (
@@ -19,6 +22,9 @@ from db import (
 
 app = FastAPI()
 
+# FIX: нормальный путь внутри контейнера
+app.mount("/static", StaticFiles(directory="/app"), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,15 +34,90 @@ app.add_middleware(
 
 init_db()
 
+clients = []
 
-def send_message(message):
+
+# ─────────────────────────────
+# WEBSOCKET
+# ─────────────────────────────
+
+@app.websocket("/ws/consumer")
+async def ws_consumer(websocket: WebSocket):
+    print("🔥 WS CONNECT ATTEMPT")
+
+    await websocket.accept()
+    clients.append(websocket)
+
+    print("✅ CLIENTS:", len(clients))
+
     try:
-        credentials = pika.PlainCredentials("guest", "guest")
+        while True:
+            await websocket.receive_text()
 
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host="rabbitmq", credentials=credentials)
+    except WebSocketDisconnect:
+        print("❌ WS DISCONNECT")
+
+    finally:
+        if websocket in clients:
+            clients.remove(websocket)
+
+
+async def push_to_clients(data: dict):
+    dead = []
+
+    for client in clients:
+        try:
+            await client.send_json(data)
+        except:
+            dead.append(client)
+
+    for d in dead:
+        if d in clients:
+            clients.remove(d)
+
+
+# ─────────────────────────────
+# INTERNAL PUSH FROM CONSUMER
+# ─────────────────────────────
+
+@app.post("/internal/push")
+async def internal_push(data: dict):
+    print("📨 INTERNAL PUSH:", data)
+    print("👥 CLIENTS:", len(clients))
+
+    await push_to_clients(data)
+    return {"ok": True}
+
+
+# ─────────────────────────────
+# HTML PAGE (FIX PATH)
+# ─────────────────────────────
+
+@app.get("/consumer.html")
+def consumer_page():
+    return FileResponse(
+        os.path.join(os.path.dirname(__file__), "consumer.html")
+    )
+
+
+# ─────────────────────────────
+# RABBIT HELPERS
+# ─────────────────────────────
+
+def get_connection():
+    credentials = pika.PlainCredentials("guest", "guest")
+
+    return pika.BlockingConnection(
+        pika.ConnectionParameters(
+            host="rabbitmq",
+            credentials=credentials
         )
+    )
 
+
+def send_to_consumer(message: dict):
+    try:
+        connection = get_connection()
         channel = connection.channel()
 
         channel.queue_declare(queue="test_queue", durable=True)
@@ -54,17 +135,27 @@ def send_message(message):
         save_pending(message["id"], message["text"])
 
 
+# ─────────────────────────────
+# API
+# ─────────────────────────────
+
 @app.post("/send")
 def send(data: dict):
     msg_id = str(uuid.uuid4())
     text = data.get("text")
 
-    message = {"id": msg_id, "text": text}
+    message = {
+        "id": msg_id,
+        "text": text
+    }
 
-    insert_message(msg_id, text, "Принято")
-    send_message(message)
+    insert_message(msg_id, text, "Отправлено в очередь")
+    send_to_consumer(message)
 
-    return {"status": "sent", "message_id": msg_id}
+    return {
+        "status": "sent",
+        "message_id": msg_id
+    }
 
 
 @app.get("/messages")
@@ -84,35 +175,15 @@ def retry(msg_id: str):
     if not message:
         raise HTTPException(404, "Message not found")
 
-    send_message(message)
+    send_to_consumer(message)
     update_status(msg_id, "Повторная отправка")
 
     return {"status": "retried"}
 
 
-@app.get("/consumer/messages")
-def consumer_messages():
-    conn = __import__("sqlite3").connect("messages.db")
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT text, created_at
-        FROM messages
-        ORDER BY created_at DESC
-        LIMIT 50
-    """)
-
-    rows = cur.fetchall()
-    conn.close()
-
-    return [
-        {
-            "text": r[0],
-            "time": r[1]
-        }
-        for r in rows
-    ]
-
+# ─────────────────────────────
+# STATUS
+# ─────────────────────────────
 
 @app.get("/status/consumer")
 def consumer_status():
@@ -136,13 +207,34 @@ def consumer_status():
 @app.get("/status/rabbitmq")
 def rabbit_status():
     try:
-        credentials = pika.PlainCredentials("guest", "guest")
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host="rabbitmq", credentials=credentials)
-        )
-        connection.close()
-
+        conn = get_connection()
+        conn.close()
         return {"status": "online"}
-
-    except Exception:
+    except:
         return {"status": "offline"}
+    
+
+@app.get("/internal/history")
+def internal_history():
+    conn = __import__("sqlite3").connect("messages.db")
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, text, created_at, status
+        FROM messages
+        ORDER BY created_at DESC
+        LIMIT 50
+    """)
+
+    rows = cur.fetchall()
+    conn.close()
+
+    return [
+        {
+            "id": r[0],
+            "text": r[1],
+            "time": r[2],
+            "status": r[3]
+        }
+        for r in rows
+    ]

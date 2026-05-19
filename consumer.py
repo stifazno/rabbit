@@ -3,6 +3,9 @@ import json
 import time
 import traceback
 import threading
+import requests
+from datetime import datetime
+
 from db import update_status, update_heartbeat
 
 QUEUE_NAME = "test_queue"
@@ -10,6 +13,18 @@ QUEUE_NAME = "test_queue"
 
 def log(msg):
     print(f"[CONSUMER] {msg}", flush=True)
+
+
+def push_to_api(message):
+    try:
+        requests.post(
+            "http://api:8000/internal/push",
+            json=message,
+            timeout=2
+        )
+        print("PUSH TO API:", message)
+    except:
+        pass
 
 
 def callback(ch, method, properties, body):
@@ -31,17 +46,23 @@ def callback(ch, method, properties, body):
 
         update_status(msg_id, "Отправлено")
 
+        # PUSH TO API (REALTIME WS TRIGGER)
+        push_to_api({
+            "id": msg_id,
+            "text": message["text"],
+            "time": str(datetime.now()),
+            "status": "done"
+        })
+
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
         log(f"✔ Обработано {msg_id}")
 
     except Exception as e:
-
         log(f"Ошибка {e}")
         log(traceback.format_exc())
 
         update_status(msg_id, "Ошибка отправки")
-
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
@@ -68,7 +89,6 @@ def start_consumer():
             )
 
             channel = connection.channel()
-
             channel.queue_declare(queue=QUEUE_NAME, durable=True)
             channel.basic_qos(prefetch_count=1)
 
@@ -97,7 +117,5 @@ def start_consumer():
 
 
 if __name__ == "__main__":
-    t = threading.Thread(target=heartbeat_loop, daemon=True)
-    t.start()
-
+    threading.Thread(target=heartbeat_loop, daemon=True).start()
     start_consumer()

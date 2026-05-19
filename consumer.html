@@ -1,111 +1,136 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="ru">
 <head>
-
-    <title>Consumer Monitoring</title>
+    <meta charset="UTF-8">
+    <title>Consumer Monitoring Chat</title>
 
     <style>
         body {
-            margin: 0;
-            background: #0f172a;
-            font-family: Arial;
+            font-family: Arial, sans-serif;
+            background: #0f0f0f;
             color: white;
+            margin: 0;
+            padding: 20px;
         }
 
         .header {
-            padding: 20px;
-            background: #111827;
-            font-size: 24px;
-            font-weight: bold;
-            border-bottom: 1px solid #1f2937;
-        }
-
-        .chat {
-            padding: 20px;
-            height: calc(100vh - 80px);
-            overflow-y: auto;
-        }
-
-        .message {
-            background: #1e293b;
-            padding: 16px;
-            border-radius: 14px;
-            margin-bottom: 15px;
-            max-width: 700px;
-        }
-
-        .top {
-            display: flex;
-            justify-content: space-between;
+            font-size: 20px;
             margin-bottom: 10px;
         }
 
         .status {
-            color: #22c55e;
-            font-weight: bold;
+            margin-bottom: 15px;
+            padding: 8px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+
+        .connected { background: green; }
+        .disconnected { background: red; }
+
+        #messages {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .msg {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 8px;
         }
 
         .text {
-            font-size: 18px;
-            line-height: 1.5;
+            font-size: 16px;
         }
 
-        .time {
-            opacity: 0.7;
+        .meta {
             font-size: 12px;
+            opacity: 0.6;
         }
     </style>
-
 </head>
 
 <body>
 
-<div class="header">
-    📡 Consumer Monitoring Chat
-</div>
+<div class="header">📡 Consumer Monitoring Chat</div>
 
-<div class="chat" id="chat"></div>
+<div id="status" class="status disconnected">🔴 Disconnected</div>
+
+<div id="messages"></div>
 
 <script>
+    const statusEl = document.getElementById("status");
+    const messagesEl = document.getElementById("messages");
 
-async function loadMessages() {
+    function setStatus(ok) {
+        statusEl.textContent = ok ? "🟢 Connected" : "🔴 Disconnected";
+        statusEl.className = "status " + (ok ? "connected" : "disconnected");
+    }
 
-    const res = await fetch("http://localhost:8000/consumer/messages");
-    const data = await res.json();
-
-    const chat = document.getElementById("chat");
-    chat.innerHTML = "";
-
-    data.forEach(msg => {
-
+    function addMessage(msg) {
         const div = document.createElement("div");
-        div.className = "message";
+        div.className = "msg";
 
         div.innerHTML = `
-            <div class="top">
-
-                <div class="status">
-                    📩 Получено
-                </div>
-
-                <div class="time">
-                    ${msg.time}
-                </div>
-
-            </div>
-
-            <div class="text">
-                ${msg.text}
+            <div class="text">${msg.text}</div>
+            <div class="meta">
+                ${msg.time || ""} | ${msg.status || "Отправлено"}
             </div>
         `;
 
-        chat.appendChild(div);
-    });
-}
+        messagesEl.prepend(div);
+    }
 
-loadMessages();
-setInterval(loadMessages, 2000);
+    // ───────────────
+    // HISTORY LOAD
+    // ───────────────
+    async function loadHistory() {
+        try {
+            const res = await fetch("/internal/history");
+            const data = await res.json();
+
+            data
+                .reverse()
+                .filter(msg => msg.status !== "Ошибка отправки")
+                .forEach(addMessage);
+        } catch (e) {
+            console.error("history error", e);
+        }
+    }
+
+    // ───────────────
+    // WS CONNECT
+    // ───────────────
+    function connectWS() {
+        const ws = new WebSocket("ws://localhost:8000/ws/consumer");
+
+        ws.onopen = () => {
+            setStatus(true);
+            console.log("WS OPEN");
+        };
+
+        ws.onclose = () => {
+            setStatus(false);
+            console.log("WS CLOSED");
+            setTimeout(connectWS, 2000);
+        };
+
+        ws.onerror = (e) => {
+            setStatus(false);
+            console.log("WS ERROR", e);
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            addMessage(data);
+        };
+    }
+
+    // старт
+    loadHistory();
+    connectWS();
 
 </script>
 
